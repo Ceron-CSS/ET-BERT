@@ -7,8 +7,7 @@
 -->
 
 <p align="center">
-  <a href='https://codebeat.co/projects/github-com-linwhitehat-et-bert-main'><img src='https://codebeat.co/badges/f75fab90-6d00-44b4-bb42-d19067400243'></a> 
-  <a href=''><img src='https://img.shields.io/badge/license-MIT-000000.svg'></a> 
+  <a href=''><img src='https://img.shields.io/badge/License-CC-brightgreen'></a> 
   <a href='https://arxiv.org/abs/2202.06335'><img src='https://img.shields.io/badge/arXiv-1909.05658-<color>.svg'></a> 
   <a href='https://dl.acm.org/doi/10.1145/3485447.3512217' target='_blank'><img src="https://img.shields.io/badge/WWW'22-Paper-blue"></a>
 </p>
