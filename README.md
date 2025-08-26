@@ -7,7 +7,7 @@
 -->
 
 <p align="center">
-  <a href=''><img src='https://img.shields.io/badge/License-CC-brightgreen'></a> 
+  <a href=''><img src='https://img.shields.io/badge/License-MIT-brightgreen'></a> 
   <a href='https://arxiv.org/abs/2202.06335'><img src='https://img.shields.io/badge/arXiv-1909.05658-<color>.svg'></a> 
   <a href='https://dl.acm.org/doi/10.1145/3485447.3512217' target='_blank'><img src="https://img.shields.io/badge/WWW'22-Paper-blue"></a>
 </p>
