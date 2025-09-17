@@ -15,16 +15,15 @@ import random
 
 random.seed(40)
 
-pcap_dir = "I:\\dataset\\"
+pcap_dir = "/data/Dataset/USTC-TFC-2class"
 tls_date = [20210301,20210808]
-pcap_name = "app_A.pcap"
-#pcap_name = "merge.pcap"
+pcap_name = "merge.pcap"
 
-word_dir = "I:/corpora/"
-word_name = "encrypted_tls13_burst.txt"
+word_dir = "/workspace/ET-BERT/corpora/"
+word_name = "encrypted_USTC_burst.txt"
 
-vocab_dir = "I:/models/"
-vocab_name = "encryptd_vocab_all.txt"
+vocab_dir = "/workspace/ET-BERT/models/"
+vocab_name = "encryptd_vocab_USTC_all.txt"
 
 def pcap_preprocess():
     
@@ -48,9 +47,9 @@ def preprocess(pcap_dir):
     
     for parent,dirs,files in os.walk(pcap_dir):
         for file in files:
-            if "pcapng" not in file and tls13_name in file:
+            if file.endswith(".pcap"):
                 n += 1
-                pcap_name = parent + "\\" + file
+                pcap_name = os.path.join(parent, file)
                 print("No.%d pacp is processed ... %s ..."%(n,file))
                 packets = scapy.rdpcap(pcap_name)
                 #word_packet = b''
@@ -85,10 +84,12 @@ def preprocess(pcap_dir):
                     words_txt.append("\n")
 
                 
-                result_file = open(word_dir + word_name, 'a')
-                for words in words_txt:
-                    result_file.write(words)
-                result_file.close()
+                out_path = os.path.join(word_dir, word_name)
+                os.makedirs(os.path.dirname(out_path), exist_ok=True)
+                with open(out_path, 'a', encoding='utf-8') as result_file:
+                    for words in words_txt:
+                        result_file.write(words)
+                    result_file.close()
     print("finish preprocessing %d pcaps"%n)
     return packet_num
 
@@ -124,7 +125,9 @@ def build_BPE():
 
     # And then train
     trainer = trainers.WordPieceTrainer(vocab_size=65536, min_frequency=2)
-    tokenizer.train([word_dir+word_name, word_dir+word_name], trainer=trainer)
+    corpus_path = os.path.join(word_dir, word_name)
+
+    tokenizer.train([corpus_path, corpus_path], trainer=trainer)
 
     # And Save it
     tokenizer.save("wordpiece.tokenizer.json", pretty=True)
@@ -204,7 +207,7 @@ def split_cap(pcap_file,pcap_name):
     return 0
 
 if __name__ == '__main__':
-    #preprocess(pcap_dir)
+    preprocess(pcap_dir)
     # build vocab
     build_BPE()
     build_vocab()

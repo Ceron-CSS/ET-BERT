@@ -43,4 +43,5 @@ class BertTarget(MlmTarget):
 
         #return loss_nsp, correct_nsp
         #return loss_mlm, correct_mlm, denominator
+        loss_nsp = torch.zeros(1, device=memory_bank.device, dtype=torch.float)
         return loss_mlm, loss_nsp, correct_mlm, correct_nsp, denominator
