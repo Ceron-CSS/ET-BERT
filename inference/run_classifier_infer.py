@@ -10,6 +10,10 @@ import torch.nn as nn
 
 uer_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(uer_dir)
+# 允许直接导入 fine-tuning 目录下的 run_classifier.py
+fine_tuning_dir = os.path.join(uer_dir, "fine-tuning")
+if os.path.isdir(fine_tuning_dir) and fine_tuning_dir not in sys.path:
+    sys.path.append(fine_tuning_dir)
 
 from uer.utils.constants import *
 from uer.utils import *

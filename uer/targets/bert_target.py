@@ -36,12 +36,13 @@ class BertTarget(MlmTarget):
         #loss_mlm, correct_mlm, denominator = 0.0, 0.0, 0.0
 
         # Next sentence prediction (NSP).
-        output_nsp = torch.tanh(self.nsp_linear_1(memory_bank[:, 0, :]))
-        output_nsp = self.nsp_linear_2(output_nsp)
-        loss_nsp = self.criterion(self.softmax(output_nsp), tgt_nsp)
-        correct_nsp = self.softmax(output_nsp).argmax(dim=-1).eq(tgt_nsp).sum()
+        # output_nsp = torch.tanh(self.nsp_linear_1(memory_bank[:, 0, :]))
+        # output_nsp = self.nsp_linear_2(output_nsp)
+        # loss_nsp = self.criterion(self.softmax(output_nsp), tgt_nsp)
+        # correct_nsp = self.softmax(output_nsp).argmax(dim=-1).eq(tgt_nsp).sum()
 
         #return loss_nsp, correct_nsp
         #return loss_mlm, correct_mlm, denominator
         loss_nsp = torch.zeros(1, device=memory_bank.device, dtype=torch.float)
+        correct_nsp = torch.zeros(1, device=memory_bank.device, dtype=torch.float)
         return loss_mlm, loss_nsp, correct_mlm, correct_nsp, denominator
