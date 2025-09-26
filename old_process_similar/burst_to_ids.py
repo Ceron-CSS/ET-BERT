@@ -8,8 +8,9 @@ from tqdm import tqdm
 import multiprocessing as mp
 from typing import Tuple
 
-# 添加uer模块到路径
-sys.path.append(os.path.join(os.path.dirname(__file__), 'uer'))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 将项目根目录添加到 Python 搜索路径
+sys.path.append(project_root)
 
 from uer.utils import *
 
@@ -22,53 +23,63 @@ class Args:
         self.tgt_spm_model_path = None
 
 
-def _worker_process(input_file: str, output_part_file: str, vocab_path: str, start_idx: int, end_idx: int) -> Tuple[int, int]:
+def _worker_process(input_file: str, output_part_file: str, vocab_path: str, record_start_idx: int, record_end_idx: int) -> Tuple[int, int]:
     """
-    单个进程的工作函数：处理 [start_idx, end_idx) 行，并写入分片文件。
+    单个进程的工作函数：以空行作为记录分隔，处理记录索引区间
+    [record_start_idx, record_end_idx) 的完整记录，并写入分片文件。
 
-    返回值: (processed_lines, total_lines_in_chunk)
+    返回值: (processed_records, scanned_records_in_chunk)
     """
     # 初始化tokenizer（每个进程各自初始化，避免进程间对象共享问题）
     args = Args(vocab_path)
     tokenizer = str2tokenizer["bert"](args)
 
-    processed_lines = 0
-    total_in_chunk = 0
+    processed_records = 0
+    scanned_records = 0
+
+    def flush_buffer(buffer, outfile):
+        nonlocal processed_records
+        if not buffer:
+            return
+        try:
+            combined_text = " ".join(buffer)
+            tokens = tokenizer.tokenize(combined_text)
+            token_ids = tokenizer.convert_tokens_to_ids(tokens)
+            token_ids_str = " ".join(map(str, token_ids))
+            outfile.write(token_ids_str + "\n")
+        except Exception:
+            outfile.write("\n")
+        processed_records += 1
 
     with open(input_file, 'r', encoding='utf-8') as infile, \
          open(output_part_file, 'w', encoding='utf-8') as outfile:
-        # 跳到起始行
-        pos = 0
-        while pos < start_idx:
-            if not infile.readline():
-                break
-            pos += 1
+        buffer = []
+        current_record_idx = 0
+        for line in infile:
+            s = line.strip()
+            if s == "":
+                # 一个记录结束
+                if current_record_idx >= record_start_idx and current_record_idx < record_end_idx:
+                    flush_buffer(buffer, outfile)
+                # 进入下一条记录
+                if buffer:
+                    scanned_records += 1
+                    current_record_idx += 1
+                buffer = []
+                # 若已经达到需要的结束记录索引，继续清空直到找到下一个分隔即可结束
+                if current_record_idx >= record_end_idx:
+                    continue
+            else:
+                buffer.append(s)
 
-        # 处理指定范围
-        while pos < end_idx:
-            line = infile.readline()
-            if not line:
-                break
-            pos += 1
-            total_in_chunk += 1
+        # EOF 情况：文件结尾可能没有空行，需要处理最后一个缓冲作为一条记录
+        if buffer:
+            if current_record_idx >= record_start_idx and current_record_idx < record_end_idx:
+                flush_buffer(buffer, outfile)
+            scanned_records += 1
+            current_record_idx += 1
 
-            line = line.strip()
-            if not line:
-                outfile.write("\n")
-                continue
-
-            try:
-                tokens = tokenizer.tokenize(line)
-                token_ids = tokenizer.convert_tokens_to_ids(tokens)
-                token_ids_str = " ".join(map(str, token_ids))
-                outfile.write(token_ids_str + "\n")
-                processed_lines += 1
-            except Exception:
-                outfile.write("\n")
-                processed_lines += 1
-                continue
-
-    return processed_lines, total_in_chunk
+    return processed_records, scanned_records
 
 
 def process_encrypted_file(input_file, output_file, vocab_path, processes_num=1):
@@ -97,40 +108,78 @@ def process_encrypted_file(input_file, output_file, vocab_path, processes_num=1)
         tokenizer = str2tokenizer["bert"](args)
         print(f"词汇表大小: {len(tokenizer.vocab)}")
 
-        processed_lines = 0
+        processed_records = 0
         with open(input_file, 'r', encoding='utf-8') as infile, \
              open(output_file, 'w', encoding='utf-8') as outfile:
+            buffer = []
             for line in tqdm(infile, total=total_lines, desc="处理进度"):
-                line = line.strip()
-                if not line:
-                    outfile.write("\n")
+                s = line.strip()
+                if s == "":
+                    # 边界：输出上一条记录（若有）
+                    if buffer:
+                        try:
+                            combined_text = " ".join(buffer)
+                            tokens = tokenizer.tokenize(combined_text)
+                            token_ids = tokenizer.convert_tokens_to_ids(tokens)
+                            token_ids_str = " ".join(map(str, token_ids))
+                            outfile.write(token_ids_str + "\n")
+                        except Exception:
+                            outfile.write("\n")
+                        processed_records += 1
+                        buffer = []
+                    # 空行本身跳过（不输出）
                     continue
+                else:
+                    buffer.append(s)
+
+            # EOF 后，如有未刷新的记录，输出
+            if buffer:
                 try:
-                    tokens = tokenizer.tokenize(line)
+                    combined_text = " ".join(buffer)
+                    tokens = tokenizer.tokenize(combined_text)
                     token_ids = tokenizer.convert_tokens_to_ids(tokens)
                     token_ids_str = " ".join(map(str, token_ids))
                     outfile.write(token_ids_str + "\n")
-                    processed_lines += 1
                 except Exception:
                     outfile.write("\n")
-                    processed_lines += 1
-                    continue
-        print(f"处理完成！共处理了 {processed_lines} 行")
+                processed_records += 1
+
+        print(f"处理完成！共处理了 {processed_records} 条记录")
         print(f"结果已保存到: {output_file}")
         return
 
     # 多进程路径
     print(f"开始处理文件...(多进程: {processes_num})")
-    # 切分行范围
-    lines_per_proc = (total_lines + processes_num - 1) // processes_num
+    # 先扫描记录总数（以空行分隔的段落）
+    total_records = 0
+    with open(input_file, 'r', encoding='utf-8') as infile:
+        has_content = False
+        for line in infile:
+            if line.strip() == "":
+                if has_content:
+                    total_records += 1
+                    has_content = False
+            else:
+                has_content = True
+        if has_content:
+            total_records += 1
+
+    if total_records == 0:
+        # 没有记录，直接创建空文件
+        open(output_file, 'w', encoding='utf-8').close()
+        print("未发现记录，已输出空文件。")
+        return
+
+    # 按记录数量切分到各进程
+    records_per_proc = (total_records + processes_num - 1) // processes_num
     ranges = []
-    start = 0
+    rs = 0
     for i in range(processes_num):
-        end = min(start + lines_per_proc, total_lines)
-        if start >= end:
+        re = min(rs + records_per_proc, total_records)
+        if rs >= re:
             break
-        ranges.append((i, start, end))
-        start = end
+        ranges.append((i, rs, re))
+        rs = re
 
     # 启动进程处理
     part_files = [f"{output_file}.part{i}" for i, _, _ in ranges]
@@ -153,12 +202,12 @@ def process_encrypted_file(input_file, output_file, vocab_path, processes_num=1)
                 pass
 
     total_processed = sum(p for p, _ in stats)
-    print(f"处理完成！共处理了 {total_processed} 行")
+    print(f"处理完成！共处理了 {total_processed} 条记录")
     print(f"结果已保存到: {output_file}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='处理encrypted_USTC_TFC_burst.txt文件，转换为token ID序列')
+    parser = argparse.ArgumentParser(description='处理burst文件，转换为token ID序列')
     parser.add_argument('--input_file', type=str, 
                        default='corpora/encrypted_USTC_TFC_burst.txt',
                        help='输入文件路径')
@@ -169,8 +218,8 @@ def main():
                        default='models/encryptd_vocab_USTC_TFC_all.txt',
                        help='词汇表文件路径')
     parser.add_argument('--processes_num', type=int,
-                       default=1,
-                       help='并行进程数，默认1为单进程')
+                       default=16,
+                       help='并行进程数，默认16为进程')
     
     args = parser.parse_args()
     

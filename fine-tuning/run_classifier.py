@@ -1,6 +1,11 @@
 """
 This script provides an exmaple to wrap UER-py for classification.
 """
+import os
+import sys
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 将项目根目录添加到 Python 搜索路径
+sys.path.append(project_root)
 import random
 import argparse
 import torch
@@ -224,7 +229,11 @@ def evaluate(args, dataset, print_confusion_matrix=False):
         print("Confusion matrix:")
         print(confusion)
         cf_array = confusion.numpy()
-        with open("/data2/lxj/pre-train/results/confusion_matrix",'w') as f:
+        # 创建结果目录并保存混淆矩阵
+        results_dir = "result"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+        with open(os.path.join(results_dir, "confusion_matrix"),'w') as f:
             for cf_a in cf_array:
                 f.write(str(cf_a)+'\n')
         print("Report precision, recall, and f1:")
