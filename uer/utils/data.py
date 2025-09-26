@@ -1,4 +1,8 @@
 import os
+import sys
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 将项目根目录添加到 Python 搜索路径
+sys.path.append(project_root)
 import random
 import pickle
 import torch
@@ -7,11 +11,12 @@ from uer.utils.constants import *
 from uer.utils.tokenizers import *
 from uer.utils.misc import count_lines
 from uer.utils.seed import set_seed
+from old_process_similar.query_neighbors import query
 
 
 def mask_seq(src, tokenizer, whole_word_masking, span_masking, span_geo_prob, span_max_length):
     vocab = tokenizer.vocab
-
+    neighbors_path = "result/json/encrypted_USTC_TFC_burst.json"
     for i in range(len(src) - 1, -1, -1):
         if src[i] != PAD_ID:
             break
@@ -75,11 +80,11 @@ def mask_seq(src, tokenizer, whole_word_masking, span_masking, span_geo_prob, sp
             if prob < 0.8:
                 src[i] = vocab.get(MASK_TOKEN)
             elif prob < 0.9:
-                while True:
-                    rdi = random.randint(1, len(vocab) - 1)
-                    if rdi not in [vocab.get(CLS_TOKEN), vocab.get(SEP_TOKEN), vocab.get(MASK_TOKEN), PAD_ID]:
-                        break
-                src[i] = rdi
+                top1 = query(neighbors_path, str(src[i]), top_k=1)  # 返回形如 [(相似词, 分数)]
+                if top1:
+                    neighbor, score = top1[0]
+                    if isinstance(neighbor, str) and neighbor.isdigit():
+                        src[i] = int(neighbor)
     tgt_mlm = sorted(tgt_mlm, key=lambda x: x[0])
     return src, tgt_mlm
 
