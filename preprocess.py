@@ -38,7 +38,7 @@ def main():
                              "and each part is fed to a single process in training step.")
     parser.add_argument("--target", choices=["bert", "lm", "mlm", "bilm", "albert", "seq2seq", "t5", "cls", "prefixlm"], default="bert",
                         help="The training target of the pretraining model.")
-    parser.add_argument("--docs_buffer_size", type=int, default=100000,
+    parser.add_argument("--docs_buffer_size", type=int, default=5000,
                         help="The buffer size of documents in memory, specific to targets that require negative sampling.")
     parser.add_argument("--seq_length", type=int, default=128, help="Sequence length of instances.")
     parser.add_argument("--tgt_seq_length", type=int, default=128, help="Target sequence length of instances.")
@@ -58,6 +58,8 @@ def main():
                         help="Hyperparameter of geometric distribution for span masking.")
     parser.add_argument("--span_max_length", type=int, default=10,
                         help="Max length for span masking.")
+    parser.add_argument("--neighbors_path", type=str, default=None,
+                        help="Path to the neighbors JSON file for similarity-based masking.")
 
     args = parser.parse_args()
 

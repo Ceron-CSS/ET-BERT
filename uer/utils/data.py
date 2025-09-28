@@ -14,7 +14,7 @@ from uer.utils.seed import set_seed
 from old_process_similar.query_neighbors import query
 
 
-def mask_seq(src, tokenizer, whole_word_masking, span_masking, span_geo_prob, span_max_length):
+def mask_seq(src, tokenizer, whole_word_masking, span_masking, span_geo_prob, span_max_length, neighbors_data=None):
     vocab = tokenizer.vocab
     neighbors_path = "result/json/encrypted_USTC_TFC_burst.json"
     for i in range(len(src) - 1, -1, -1):
@@ -80,7 +80,7 @@ def mask_seq(src, tokenizer, whole_word_masking, span_masking, span_geo_prob, sp
             if prob < 0.8:
                 src[i] = vocab.get(MASK_TOKEN)
             elif prob < 0.9:
-                top1 = query(neighbors_path, str(src[i]), top_k=1)  # 返回形如 [(相似词, 分数)]
+                top1 = query(neighbors_path, str(src[i]), top_k=1, neighbors=neighbors_data)  # 返回形如 [(相似词, 分数)]
                 if top1:
                     neighbor, score = top1[0]
                     if isinstance(neighbor, str) and neighbor.isdigit():
@@ -202,6 +202,20 @@ class Dataset(object):
         self.span_max_length = args.span_max_length
         self.docs_buffer_size = args.docs_buffer_size
         self.dup_factor = args.dup_factor
+        self.neighbors_path = getattr(args, 'neighbors_path', None)
+        
+        # 预加载 neighbors 数据（如果提供了路径）
+        self.neighbors_data = None
+        if self.neighbors_path:
+            try:
+                from old_process_similar.query_neighbors import load_neighbors
+                print(f"Loading neighbors data from {self.neighbors_path}...")
+                self.neighbors_data = load_neighbors(self.neighbors_path)
+                print("Neighbors data loaded successfully.")
+            except (ImportError, FileNotFoundError, Exception) as e:
+                print(f"Warning: Failed to load neighbors data from {self.neighbors_path}: {e}")
+                print("Continuing without similarity-based masking.")
+                self.neighbors_data = None
 
     def build_and_save(self, workers_num):
         """
@@ -400,7 +414,7 @@ class BertDataset(Dataset):
                         src.append(PAD_ID)
 
                     if not self.dynamic_masking:
-                        src, tgt_mlm = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length)
+                        src, tgt_mlm = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length, self.neighbors_data)
                         instance = (src, tgt_mlm, is_random_next, seg_pos)
                     else:
                         instance = (src, is_random_next, seg_pos)
@@ -441,7 +455,7 @@ class BertDataLoader(DataLoader):
                     is_next.append(ins[2])
                     seg.append([1] * ins[3][0] + [2] * (ins[3][1] - ins[3][0]) + [PAD_ID] * (len(ins[0]) - ins[3][1]))
                 else:
-                    src_single, tgt_mlm_single = mask_seq(ins[0], self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length)
+                    src_single, tgt_mlm_single = mask_seq(ins[0], self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length, self.neighbors_data)
                     masked_words_num += len(tgt_mlm_single)
                     src.append(src_single)
                     tgt_mlm.append([0] * len(ins[0]))
@@ -527,7 +541,7 @@ class MlmDataset(Dataset):
             seg_pos = [len(src)]
 
             if not self.dynamic_masking:
-                src, tgt = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length)
+                src, tgt = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length, self.neighbors_data)
                 instance = (src, tgt, seg_pos)
             else:
                 instance = (src, seg_pos)
@@ -541,7 +555,7 @@ class MlmDataset(Dataset):
             src.append(PAD_ID)
 
         if not self.dynamic_masking:
-            src, tgt = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length)
+            src, tgt = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length, self.neighbors_data)
             instance = (src, tgt, seg_pos)
         else:
             instance = (src, seg_pos)
@@ -578,7 +592,7 @@ class MlmDataLoader(DataLoader):
                             tgt[-1][mask[0]] = mask[1]
                         seg.append([1] * ins[2][0] + [PAD_ID] * (len(ins[0]) - ins[2][0]))
                     else:
-                        src_single, tgt_single = mask_seq(ins[0], self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length)
+                        src_single, tgt_single = mask_seq(ins[0], self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length, self.neighbors_data)
                         masked_words_num += len(tgt_single)
                         src.append(src_single)
                         tgt.append([0] * len(ins[0]))
@@ -693,7 +707,7 @@ class AlbertDataset(Dataset):
                         src.append(PAD_ID)
 
                     if not self.dynamic_masking:
-                        src, tgt_mlm = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length)
+                        src, tgt_mlm = mask_seq(src, self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length, self.neighbors_data)
                         instance = (src, tgt_mlm, is_wrong_order, seg_pos)
                     else:
                         instance = (src, is_wrong_order, seg_pos)
@@ -957,7 +971,7 @@ class T5DataLoader(DataLoader):
                     tgt_single = ins[1]
                     seg.append([1] * ins[2][0] + [PAD_ID] * (len(ins[0]) - ins[2][0]))
                 else:
-                    src_single, tgt_single = mask_seq(ins[0], self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length)
+                    src_single, tgt_single = mask_seq(ins[0], self.tokenizer, self.whole_word_masking, self.span_masking, self.span_geo_prob, self.span_max_length, self.neighbors_data)
                     seg.append([1] * ins[1][0] + [PAD_ID] * (len(ins[0]) - ins[1][0]))
 
                 MASK_ID = self.vocab.get(MASK_TOKEN)

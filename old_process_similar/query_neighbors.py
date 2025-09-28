@@ -15,8 +15,21 @@ def load_neighbors(path: str):
     return {k: [(w, float(s)) for w, s in v] for k, v in data.items()}
 
 
-def query(neighbors_path: str, word: str, top_k: int) -> List[Tuple[str, float]]:
-    neighbors = load_neighbors(neighbors_path)
+def query(neighbors_path: str, word: str, top_k: int, neighbors: dict = None) -> List[Tuple[str, float]]:
+    """
+    查询词的相似邻居
+    
+    Args:
+        neighbors_path: 邻居文件路径（当neighbors为None时使用）
+        word: 要查询的词
+        top_k: 返回top-k个结果
+        neighbors: 已加载的邻居数据字典，如果提供则不会重新加载文件
+    
+    Returns:
+        相似词列表，格式为[(词, 分数), ...]
+    """
+    if neighbors is None:
+        neighbors = load_neighbors(neighbors_path)
     rows = neighbors.get(word, [])
     return rows[:top_k]
 

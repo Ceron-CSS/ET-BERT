@@ -1,4 +1,8 @@
 torch>=1.0
-argparse
+argparse~=1.4.0
 six>=1.12.0
-packaging
+packaging~=25.0
+
+numpy~=2.0.2
+tqdm~=4.67.1
+scipy~=1.14.1
