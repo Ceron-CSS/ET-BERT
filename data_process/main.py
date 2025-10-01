@@ -21,10 +21,10 @@ import dataset_generation
 import data_preprocess
 import open_dataset_deal
 
-_category = 120 # dataset class
-dataset_dir = "E:\\tsv\\ISCX-VPN_Service_dataset" # the path to save dataset for dine-tuning
+_category = 2 # dataset class
+dataset_dir = "E:\\tsv\\" # the path to save dataset for dine-tuning
 
-pcap_path, dataset_save_path, samples, features, dataset_level = "E:\\tsv\\ISCX-VPN_Service_datasett\\", "E:\\tsv\\ISCX-VPN_Service_dataset\\", [5000], ["payload"], "packet"
+pcap_path, dataset_save_path, samples, features, dataset_level = "E:\\USTC-TFC-20class\\", "E:\\npy\\", [5000], ["payload"], "packet"
 
 def dataset_extract(model):
     
@@ -32,13 +32,13 @@ def dataset_extract(model):
     Y_dataset = {}
 
     try:
-        if os.listdir(dataset_save_path + "dataset\\"):
-            print("Reading dataset from %s ..." % (dataset_save_path + "dataset\\"))
+        if os.listdir(dataset_save_path):
+            print("Reading dataset from %s ..." % (dataset_save_path))
             
             x_payload_train, x_payload_test, x_payload_valid,\
             y_train, y_test, y_valid = \
-                np.load(dataset_save_path + "dataset\\x_payload_train.npy",allow_pickle=True), np.load(dataset_save_path + "dataset\\x_payload_test.npy",allow_pickle=True), np.load(dataset_save_path + "dataset\\x_payload_valid.npy",allow_pickle=True),\
-                np.load(dataset_save_path + "dataset\\y_train.npy",allow_pickle=True), np.load(dataset_save_path + "dataset\\y_test.npy",allow_pickle=True), np.load(dataset_save_path + "dataset\\y_valid.npy",allow_pickle=True)
+                np.load(dataset_save_path + "x_payload_train.npy",allow_pickle=True), np.load(dataset_save_path + "x_payload_test.npy",allow_pickle=True), np.load(dataset_save_path + "x_payload_valid.npy",allow_pickle=True),\
+                np.load(dataset_save_path + "y_train.npy",allow_pickle=True), np.load(dataset_save_path + "y_test.npy",allow_pickle=True), np.load(dataset_save_path + "y_valid.npy",allow_pickle=True)
             
             X_dataset, Y_dataset = models_deal(model, X_dataset, Y_dataset,
                                                x_payload_train, x_payload_test,
@@ -48,9 +48,9 @@ def dataset_extract(model):
             return X_dataset, Y_dataset
     except Exception as e:
         print(e)
-        print("Dataset directory %s not exist.\nBegin to obtain new dataset."%(dataset_save_path + "dataset\\"))
+        print("Dataset directory %s not exist.\nBegin to obtain new dataset."%(dataset_save_path))
 
-    X,Y = dataset_generation.generation(pcap_path, samples, features, splitcap=False, dataset_save_path=dataset_save_path,dataset_level=dataset_level)
+    X,Y = dataset_generation.generation(pcap_path, samples, features, splitcap=True, dataset_save_path=dataset_save_path,dataset_level=dataset_level)
 
     dataset_statistic = [0] * _category
 
@@ -96,18 +96,15 @@ def dataset_extract(model):
         x_payload_valid, y_valid = x_payload_test[valid_index], y_test[valid_index]
         x_payload_test, y_test = x_payload_test[test_index], y_test[test_index]
 
-    if not os.path.exists(dataset_save_path+"dataset\\"):
-        os.mkdir(dataset_save_path+"dataset\\")
+    output_x_payload_train = os.path.join(dataset_save_path, 'x_payload_train.npy')
 
-    output_x_payload_train = os.path.join(dataset_save_path + "dataset\\", 'x_payload_train.npy')
+    output_x_payload_test = os.path.join(dataset_save_path, 'x_payload_test.npy')
 
-    output_x_payload_test = os.path.join(dataset_save_path + "dataset\\", 'x_payload_test.npy')
+    output_x_payload_valid = os.path.join(dataset_save_path, 'x_payload_valid.npy')
 
-    output_x_payload_valid = os.path.join(dataset_save_path + "dataset\\", 'x_payload_valid.npy')
-
-    output_y_train = os.path.join(dataset_save_path+"dataset\\",'y_train.npy')
-    output_y_test = os.path.join(dataset_save_path + "dataset\\", 'y_test.npy')
-    output_y_valid = os.path.join(dataset_save_path + "dataset\\", 'y_valid.npy')
+    output_y_train = os.path.join(dataset_save_path,'y_train.npy')
+    output_y_test = os.path.join(dataset_save_path, 'y_test.npy')
+    output_y_valid = os.path.join(dataset_save_path, 'y_valid.npy')
 
     np.save(output_x_payload_train, x_payload_train)
     np.save(output_x_payload_test, x_payload_test)

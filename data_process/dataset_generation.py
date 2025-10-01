@@ -38,18 +38,15 @@ def split_cap(pcap_path, pcap_file, pcap_name, pcap_label='', dataset_level = 'f
     if pcap_label != '':
         if not os.path.exists(pcap_path + "\\splitcap\\" + pcap_label):
             os.mkdir(pcap_path + "\\splitcap\\" + pcap_label)
-        if not os.path.exists(pcap_path + "\\splitcap\\" + pcap_label + "\\" + pcap_name):
-            os.mkdir(pcap_path + "\\splitcap\\" + pcap_label + "\\" + pcap_name)
-   
-        output_path = pcap_path + "\\splitcap\\" + pcap_label + "\\" + pcap_name
+        output_path = pcap_path + "\\splitcap\\" + pcap_label
     else:
         if not os.path.exists(pcap_path + "\\splitcap\\" + pcap_name):
             os.mkdir(pcap_path + "\\splitcap\\" + pcap_name)
         output_path = pcap_path + "\\splitcap\\" + pcap_name
     if dataset_level == 'flow':
-        cmd = "I:\\SplitCap.exe -r %s -s session -o " + output_path
+        cmd = "E:\\SplitCap.exe -r %s -s session -o " + output_path
     elif dataset_level == 'packet':
-        cmd = "I:\\SplitCap.exe -r %s -s packets 1 -o " + output_path
+        cmd = "E:\\SplitCap.exe -r %s -s packets 1 -o " + output_path
     command = cmd%pcap_file
     os.system(command)
     return output_path
@@ -280,7 +277,7 @@ def generation(pcap_path, samples, features, splitcap = False, payload_length = 
                 if splitcap:
                     for file in ff:
                         session_path = (split_cap(pcap_path, p + "\\" + file, file.split(".")[-2], dir, dataset_level = dataset_level))
-                    session_pcap_path[dir] = pcap_path + "\\splitcap\\" + dir
+                    session_pcap_path[dir] = session_path
                 else:
                     session_pcap_path[dir] = pcap_path + dir
         break
@@ -346,8 +343,8 @@ def generation(pcap_path, samples, features, splitcap = False, payload_length = 
                     "samples": 0,
                     "payload": {}
                 }
-        if splitcap:
-            continue
+        # if splitcap:
+        #     continue
 
         target_all_files = [x[0] + "\\" + y for x in [(p, f) for p, d, f in os.walk(session_pcap_path[key])] for y in x[1]]
         r_files = random.sample(target_all_files, samples[label_count])
