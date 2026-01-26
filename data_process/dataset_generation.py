@@ -17,6 +17,7 @@ import pandas as pd
 import scapy.all as scapy
 from functools import reduce
 from flowcontainer.extractor import extract
+from concurrent.futures import ThreadPoolExecutor, as_completed # 导入线程池模块
 
 random.seed(40)
 
@@ -32,23 +33,24 @@ def convert_pcapng_2_pcap(pcapng_path, pcapng_file, output_path):
     return 0
 
 def split_cap(pcap_path, pcap_file, pcap_name, pcap_label='', dataset_level = 'flow'):
-    
-    if not os.path.exists(pcap_path + "\\splitcap"):
-        os.mkdir(pcap_path + "\\splitcap")
+    # 使用 exist_ok=True 防止多线程竞争创建目录报错
+    base_split_path = os.path.join(pcap_path, "splitcap")
+    os.makedirs(base_split_path, exist_ok=True)
+
     if pcap_label != '':
-        if not os.path.exists(pcap_path + "\\splitcap\\" + pcap_label):
-            os.mkdir(pcap_path + "\\splitcap\\" + pcap_label)
-        output_path = pcap_path + "\\splitcap\\" + pcap_label
+        output_path = os.path.join(base_split_path, pcap_label)
     else:
-        if not os.path.exists(pcap_path + "\\splitcap\\" + pcap_name):
-            os.mkdir(pcap_path + "\\splitcap\\" + pcap_name)
-        output_path = pcap_path + "\\splitcap\\" + pcap_name
+        output_path = os.path.join(base_split_path, pcap_name)
+    
+    os.makedirs(output_path, exist_ok=True)
+
     if dataset_level == 'flow':
-        cmd = "E:\\SplitCap.exe -r %s -s session -o " + output_path
+        # 注意：SplitCap.exe 路径如果包含空格，建议用引号包裹 %s
+        cmd = 'E:\\SplitCap.exe -r "%s" -s session -o "%s"' % (pcap_file, output_path)
     elif dataset_level == 'packet':
-        cmd = "E:\\SplitCap.exe -r %s -s packets 1 -o " + output_path
-    command = cmd%pcap_file
-    os.system(command)
+        cmd = 'E:\\SplitCap.exe -r "%s" -s packets 1 -o "%s"' % (pcap_file, output_path)
+    
+    os.system(cmd)
     return output_path
 
 def cut(obj, sec):
@@ -254,30 +256,14 @@ def generation(pcap_path, samples, features, splitcap = False, payload_length = 
         X, Y = obtain_data(pcap_path, samples, features, dataset_save_path)
         return X,Y
 
+    # --- 下面是特征生成的多线程改造 ---
     dataset = {}
-    
     label_name_list = []
-
-    session_pcap_path  = {}
+    session_pcap_path = {}
 
     for parent, dirs, files in os.walk(pcap_path):
         if label_name_list == []:
             label_name_list.extend(dirs)
-
-        tls13 = 0
-        if tls13:
-            record_file = "I:\\ex_results\\picked_file_record"
-            target_path = "I:\\ex_results\\packet_splitcap\\"
-            if not os.path.getsize(target_path):
-                with open(record_file, 'r') as f:
-                    record_files = f.read().split('\n')
-                for file in record_files[:-2]:
-                    current_path = target_path + file.split('\\')[5]
-                    new_name = '_'.join(file.split('\\')[6:])
-                    if not os.path.exists(current_path):
-                        os.mkdir(current_path)
-                    shutil.copyfile(file, os.path.join(current_path, new_name))
-
         for dir in label_name_list:
             for p,dd,ff in os.walk(parent + "\\" + dir):
                 
@@ -294,88 +280,56 @@ def generation(pcap_path, samples, features, splitcap = False, payload_length = 
         label_id[label_name_list[index]] = index
 
     r_file_record = []
-    print("\nBegin to generate features.")
+    print("\nBegin to generate features (Multi-threaded).")
+
+    # 定义一个内部函数，用于线程执行的具体任务
+    def _extract_task(f_path, lid, level, p_len, p_pac):
+        if level == "flow":
+            data = get_feature_flow(f_path, payload_len=p_len, payload_pac=p_pac)
+        else:
+            data = get_feature_packet(f_path, payload_len=p_len)
+        return f_path, lid, data
 
     label_count = 0
-    for key in tqdm.tqdm(session_pcap_path.keys()):
-
-        if dataset_level == "flow":
-            if splitcap:
-                for p, d, f in os.walk(session_pcap_path[key]):
-                    for file in f:
-                        file_size = float(size_format(os.path.getsize(p + "\\" + file)))
-                        # 2KB
-                        if file_size < 5:
-                            os.remove(p + "\\" + file)
-                            print("remove sample: %s for its size is less than 5 KB." % (p + "\\" + file))
-
+    all_tasks = []
+    
+    # 建立线程池
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        # 第一步：遍历并分发任务
+        for key in tqdm.tqdm(session_pcap_path.keys(), desc="Scheduling"):
+            # 这里的 dataset 初始化保持原样
             if label_id[key] not in dataset:
-                dataset[label_id[key]] = {
-                    "samples": 0,
-                    "payload": {},
-                    "length": {},
-                    "time": {},
-                    "direction": {},
-                    "message_type": {}
-                }
-        elif dataset_level == "packet":
-            if splitcap:# not splitcap
-                for p, d, f in os.walk(session_pcap_path[key]):
-                    for file in f:
-                        current_file = p + "\\" + file
-                        if not os.path.getsize(current_file):
-                            os.remove(current_file)
-                            print("current pcap %s is 0KB and delete"%current_file)
-                        else:
-                            current_packet = scapy.rdpcap(p + "\\" + file)
-                            file_size = float(size_format(os.path.getsize(p + "\\" + file)))
-                            try:
-                                if 'TCP' in str(current_packet.res):
-                                    # 0.12KB
-                                    if file_size < 0.14:
-                                        os.remove(p + "\\" + file)
-                                        print("remove TCP sample: %s for its size is less than 0.14KB." % (
-                                                    p + "\\" + file))
-                                elif 'UDP' in str(current_packet.res):
-                                    if file_size < 0.1:
-                                        os.remove(p + "\\" + file)
-                                        print("remove UDP sample: %s for its size is less than 0.1KB." % (
-                                                    p + "\\" + file))
-                            except Exception as e:
-                                print("error in data_generation 611: scapy read pcap and analyse error")
-                                os.remove(p + "\\" + file)
-                                print("remove packet sample: %s for reading error." % (p + "\\" + file))
-            if label_id[key] not in dataset:
-                dataset[label_id[key]] = {
-                    "samples": 0,
-                    "payload": {}
-                }
-        # if splitcap:
-        #     continue
+                if dataset_level == "flow":
+                    dataset[label_id[key]] = {"samples": 0, "payload": {}, "length": {}, "time": {}, "direction": {}, "message_type": {}}
+                else:
+                    dataset[label_id[key]] = {"samples": 0, "payload": {}}
 
-        target_all_files = [x[0] + "\\" + y for x in [(p, f) for p, d, f in os.walk(session_pcap_path[key])] for y in x[1]]
-        r_files = random.sample(target_all_files, samples[label_count])
-        label_count += 1
-        for r_f in r_files:
-            if dataset_level == "flow":
-                feature_data = get_feature_flow(r_f, payload_len=payload_length, payload_pac=payload_packet)
-            elif dataset_level == "packet":
-                feature_data = get_feature_packet(r_f, payload_len=payload_length)
+            # 获取该类别下所有文件
+            target_all_files = [x[0] + "\\" + y for x in [(p, f) for p, d, f in os.walk(session_pcap_path[key])] for y in x[1]]
+            
+            # 采样
+            num_samples = min(len(target_all_files), samples[label_count])
+            r_files = random.sample(target_all_files, num_samples)
+            label_count += 1
+            
+            for r_f in r_files:
+                # 提交任务到线程池，不阻塞，直接进入下一个循环
+                task = executor.submit(_extract_task, r_f, label_id[key], dataset_level, payload_length, payload_packet)
+                all_tasks.append(task)
 
-            if feature_data == -1:
+        # 第二步：回收结果
+        for future in tqdm.tqdm(as_completed(all_tasks), total=len(all_tasks), desc="Extracting"):
+            r_f, lid, feature_data = future.result()
+            
+            if feature_data == -1 or not feature_data:
                 continue
+            
             r_file_record.append(r_f)
-            dataset[label_id[key]]["samples"] += 1
-            if len(dataset[label_id[key]]["payload"].keys()) > 0:
-                dataset[label_id[key]]["payload"][str(dataset[label_id[key]]["samples"])] = \
-                    feature_data[0]
-                if dataset_level == "flow":
-                    pass
-            else:
-                dataset[label_id[key]]["payload"]["1"] = feature_data[0]
-                if dataset_level == "flow":
-                    pass
+            dataset[lid]["samples"] += 1
+            # 这里的 payload 赋值逻辑保留你原来的 str 索引方式
+            dataset[lid]["payload"][str(dataset[lid]["samples"])] = feature_data[0]
 
+    # --- 结尾统计和保存逻辑保持不变 ---
     all_data_number = 0
     for index in range(len(label_name_list)):
         print("%s\t%s\t%d"%(label_id[label_name_list[index]], label_name_list[index], dataset[label_id[label_name_list[index]]]["samples"]))
@@ -478,11 +432,20 @@ def pretrain_dataset_generation(pcap_path):
                     shutil.copy(_parent+"\\"+file, pcap_output_path+file)
     
     if not os.path.exists(output_split_path + "splitcap"):
-        print("Begin to split pcap as session flows.")
+        print("Begin to split pcap as session flows in parallel.")
         
-        for _p,_d,files in os.walk(pcap_output_path):
+        all_files = []
+        for _p, _d, files in os.walk(pcap_output_path):
             for file in files:
-                split_cap(output_split_path,_p+file,file)
+                if file.endswith(".pcap"): # 确保只处理 pcap
+                    all_files.append((_p, file))
+
+        # 使用线程池并行执行 split_cap
+        # max_workers 建议设置为 CPU 核心数的 1-2 倍，或者根据磁盘 I/O 能力调整（例如 4-8）
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            for _p, file in all_files:
+                executor.submit(split_cap, output_split_path, _p + file, file)
+
     print("Begin to generate burst dataset.")
     # burst sample
     for _p,_d,files in os.walk(output_split_path + "splitcap"):

@@ -21,10 +21,10 @@ import dataset_generation
 import data_preprocess
 import open_dataset_deal
 
-_category = 2 # dataset class
-dataset_dir = "E:\\tsv\\" # the path to save dataset for dine-tuning
+_category = 120 # dataset class
+dataset_dir = "E:\\tsv\\tls1.3_payload_only_no_encrypted_disorder_packet\\" # the path to save dataset for dine-tuning
 
-pcap_path, dataset_save_path, samples, features, dataset_level = "E:\\USTC-TFC-20class\\", "E:\\npy\\", [5000], ["payload"], "packet"
+pcap_path, dataset_save_path, samples, features, dataset_level = "E:\\dataset\\tls1.3_payload_only_no_encrypted_disorder\\", "E:\\npy\\tls1.3_payload_only_no_encrypted_disorder_packet\\", [1000], ["payload"], "packet"
 
 def dataset_extract(model):
     
@@ -74,8 +74,8 @@ def dataset_extract(model):
                 for index_sample in range(len(X[0][index_label])):
                     X_payload.append(X[0][index_label][index_sample])
 
-    split_1 = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=41) 
-    split_2 = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=42) 
+    split_1 = StratifiedShuffleSplit(n_splits=1, test_size=0.4, random_state=41) 
+    split_2 = StratifiedShuffleSplit(n_splits=1, test_size=0.01, random_state=42) 
 
     x_payload = np.array(X_payload)
     dataset_label = np.array(Y_all)
