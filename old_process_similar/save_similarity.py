@@ -124,6 +124,9 @@ def main():
     context_vocab = build_context_vocab(cooc, args.top_contexts)
     X, centers = build_dense_matrix(cooc, context_vocab)
 
+    rows, cols = X.shape
+    print(f"共现矩阵维度: {rows} 行 x {cols} 列")
+    
     if args.precompute:
         assert args.save_neighbors, '--precompute 需要指定 --save_neighbors 输出路径'
         neighbors = precompute_topk_all(X, centers, args.top_k, args.batch_size)

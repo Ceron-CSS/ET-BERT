@@ -351,7 +351,7 @@ def main():
         if torch.cuda.device_count() > 1:
             model.module.load_state_dict(torch.load(args.output_model_path))
         else:
-            model.load_state_dict(torch.load(args.output_model_path))
+            model.load_state_dict(torch.load(args.output_model_path, weights_only=True))
         evaluate(args, read_dataset(args, args.test_path), True)
 
 

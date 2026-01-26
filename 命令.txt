@@ -1,0 +1,81 @@
+推理
+CUDA_VISIBLE_DEVICES=1 python3 inference/run_classifier_infer.py --load_model_path result/fine-bin/finetuned_USTC_nonsp_tor_pkt.bin \
+                                          --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt \
+                                          --test_path tsv/tor/nolabel_test_dataset.tsv \
+                                          --prediction_path result/prediction_nonsp_tor.tsv \
+                                          --labels_num 14 \
+                                          --embedding word_pos_seg --encoder transformer --mask fully_visible
+
+CUDA_VISIBLE_DEVICES=0 python3 inference/run_classifier_infer.py --load_model_path result/fine-bin/finetuned_USTC_similar_all_tor_pkt.bin \
+                                          --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt \
+                                          --test_path tsv/tor/nolabel_test_dataset.tsv \
+                                          --prediction_path result/prediction_similar_tor.tsv \
+                                          --labels_num 14 \
+                                          --embedding word_pos_seg --encoder transformer --mask fully_visible
+
+微调
+CUDA_VISIBLE_DEVICES=1 python3 fine-tuning/run_classifier.py --pretrained_model_path result/pre-bin/pre_trained_USTC_TFC_similars_all_230000.bin \
+                                   --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt \
+                                   --train_path tsv/tor/train_dataset.tsv \
+                                   --dev_path tsv/tor/valid_dataset.tsv \
+                                   --test_path tsv/tor/test_dataset.tsv \
+                                   --epochs_num 10 --batch_size 32 --embedding word_pos_seg \
+                                   --encoder transformer --mask fully_visible \
+                                   --seq_length 128 --learning_rate 2e-5 \
+                                   --output_model_path result/fine-bin/finetuned_USTC_similar_all_tor_pkt.bin
+
+CUDA_VISIBLE_DEVICES=0 python3 fine-tuning/run_classifier.py --pretrained_model_path result/pre-bin/pre_trained_USTC_TFC_nonsp_330000.bin \
+                                   --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt \
+                                   --train_path tsv/tor/train_dataset.tsv \
+                                   --dev_path tsv/tor/valid_dataset.tsv \
+                                   --test_path tsv/tor/test_dataset.tsv \
+                                   --epochs_num 10 --batch_size 32 --embedding word_pos_seg \
+                                   --encoder transformer --mask fully_visible \
+                                   --seq_length 128 --learning_rate 2e-5 \
+                                   --output_model_path result/fine-bin/finetuned_USTC_nonsp2_tor_pkt.bin
+
+预训练
+python3 pre-training/pretrain.py --dataset_path result/pt/USTC_TFC_similar_7111.pt --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt \
+                       --output_model_path result/pre-bin/pre_trained_USTC_TFC_similars_all_7111.bin \
+                       --world_size 2 --gpu_ranks 0 1 \
+                       --total_steps 330000 --save_checkpoint_steps 10000 --batch_size 32 \
+                       --embedding word_pos_seg --encoder transformer --mask fully_visible --target bert
+预处理
+python3 preprocess.py --corpus_path result/burst/encrypted_USTC_TFC_burst.txt \
+                         --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt \
+                         --dataset_path result/pt/USTC_TFC_similar_all.pt --processes_num 16 --target bert --neighbors_path result/json/encrypted_USTC_TFC_burst_all.json
+
+python3 preprocess.py --corpus_path result/burst/encrypted_USTC_TFC_burst.txt \
+                         --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt \
+                         --dataset_path result/pt/test_similar_7111.pt --processes_num 16 --target bert --neighbors_path result/json/encrypted_USTC_TFC_burst_all.json
+	        
+
+Tokens生成ids
+python process_similar/burst_to_ids.py --input_file result/burst/test_burst.txt --output_file result/ids/test_ids_x.txt --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt --processes_num 12
+
+构建稠密矩阵
+python process_similar/statistical_freq_quan.py --build --input_file result/ids/test_ids_x.txt --vocab_file result/vocab/encryptd_vocab_USTC_TFC_all.txt --output_memmap result/dat/choumi.dat --window_size 5
+
+导出稠密矩阵的某一行
+python process_similar/statistical_freq_quan.py --memmap_file result/dat/choumi.dat --export_row_tsv 38999 --tsv_out result/rows/38999_row.txt
+
+
+
+统计ids
+python old_process_similar/statistical_freq.py --build --input_file result/ids/USTC_TFC_tokenized_ids.txt --output_pickle result/pkl/USTC_TFC.pkl --window_size 5
+
+查询top-k 
+python old_process_similar/statistical_freq.py --query 38999 --top 10 --pickle_file result/pkl/test_x.pkl
+
+保存相似度
+python3 old_process_similar/save_similarity.py --pickle_file result/pkl/USTC_TFC_all.pkl --top_k 5 --precompute --save_neighbors result/json/encrypted_USTC_TFC_burst_all.json --top_contexts 0
+
+python3 old_process_similar/similar_all.py --pickle_file result/pkl/test_x.pkl --vocab_size 65541 --top_k 5 --precompute --save_neighbors result/json/test_y.json --save_row 38999 --save_row_output output/row_38999.txt
+
+查询相似度
+python old_process_similar/query_neighbors.py --neighbors_file result/json/test_burst.json --query 38999 --top_k 5
+
+main顺序执行
+python3 old_process_similar/main.py --input_file result/burst/encrypted_USTC_TFC_burst.txt --vocab_path result/vocab/encryptd_vocab_USTC_TFC_all.txt --processes_num 8 --window_size 5 --top_k 5 --top_contexts 0
+
+python3 old_process_similar/main_noids.py --ids_file result/ids/USTC_TFC_tokenized_ids.txt --window_size 5 --top_k 5 --top_contexts 0

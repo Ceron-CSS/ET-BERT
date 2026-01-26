@@ -134,7 +134,14 @@ def get_burst_feature(label_pcap, payload_len):
 def get_feature_packet(label_pcap,payload_len):
     feature_data = []
 
-    packets = scapy.rdpcap(label_pcap)
+    try:
+        # 尝试读取 PCAP 文件
+        packets = scapy.rdpcap(label_pcap)
+    except Exception as e:
+        # 如果读取失败，打印文件名并返回空列表，避免程序中断
+        print(f"\n[!] 警告: 跳过损坏文件: {label_pcap}")
+        print(f"[!] 错误原因: {e}")
+        return []
     packet_data_string = ''  
 
     for packet in packets:
