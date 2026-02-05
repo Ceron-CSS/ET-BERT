@@ -67,6 +67,51 @@ def read_dataset(args, path):
 
     return dataset
 
+def calculate_metrics(eva_path, prediction_path, labels_num):
+    print("Starting Post-Inference Evaluation...")
+    
+    # 1. 读取真实标签
+    gold_labels = []
+    with open(eva_path, mode="r", encoding="utf-8") as f:
+        columns = {name: i for i, name in enumerate(f.readline().strip().split("\t"))}
+        for line in f:
+            parts = line.strip().split("\t")
+            if parts:
+                gold_labels.append(int(parts[columns["label"]]))
+
+    # 2. 读取预测标签
+    pred_labels = []
+    with open(prediction_path, mode="r", encoding="utf-8") as f:
+        f.readline() # 跳过表头 "label"
+        for line in f:
+            parts = line.strip().split("\t")
+            if parts:
+                pred_labels.append(int(parts[0])) # 预测文件的第一列通常是预测值
+
+    # 3. 检查数据长度是否一致
+    if len(gold_labels) != len(pred_labels):
+        print(f"Error: Length mismatch! Gold: {len(gold_labels)}, Pred: {len(pred_labels)}")
+        return
+
+    # 4. 计算混淆矩阵和指标 (复用 run_classifier.py 的逻辑)
+    confusion = torch.zeros(labels_num, labels_num, dtype=torch.long)
+    for p, g in zip(pred_labels, gold_labels):
+        confusion[p, g] += 1
+
+    print("Confusion matrix:")
+    print(confusion)
+    print("Report precision, recall, and f1:")
+    eps = 1e-9
+    correct = 0
+    for i in range(labels_num):
+        p = confusion[i, i].item() / (confusion[i, :].sum().item() + eps)
+        r = confusion[i, i].item() / (confusion[:, i].sum().item() + eps)
+        f1 = 0 if (p + r) == 0 else 2 * p * r / (p + r)
+        correct += confusion[i, i].item()
+        print("Label {}: {:.3f}, {:.3f}, {:.3f}".format(i, p, r, f1))
+
+    print("Acc. (Correct/Total): {:.4f} ({}/{}) ".format(correct / len(gold_labels), correct, len(gold_labels)))
+
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -147,6 +192,9 @@ def main():
                 if args.output_prob:
                     f.write("\t" + " ".join([str(v) for v in prob[j]]))
                 f.write("\n")
+                
+    # 推理结束，执行评估
+    calculate_metrics(args.eva_path, args.prediction_path, args.labels_num)
 
 
 if __name__ == "__main__":
