@@ -120,7 +120,7 @@ def load_class_names(labels_num, class_names_path=""):
 
 
 def calculate_metrics_from_arrays(gold_labels, pred_labels, labels_num):
-    """直接用数组计算混淆矩阵/指标（避免再从 prediction_path 读一遍）"""
+    """直接用数组计算混淆矩阵/指标"""
     print("Starting Post-Inference Evaluation...")
 
     if len(gold_labels) != len(pred_labels):
@@ -131,21 +131,50 @@ def calculate_metrics_from_arrays(gold_labels, pred_labels, labels_num):
     for p, g in zip(pred_labels, gold_labels):
         confusion[int(p), int(g)] += 1
 
-    print("Confusion matrix:")
-    print(confusion)
-    print("Report precision, recall, and f1:")
+    print("Confusion matrix:\n", confusion)
+    print("-" * 30)
+    
     eps = 1e-9
     correct = 0
-    for i in range(labels_num):
-        p = confusion[i, i].item() / (confusion[i, :].sum().item() + eps)
-        r = confusion[i, i].item() / (confusion[:, i].sum().item() + eps)
-        f1 = 0 if (p + r) == 0 else 2 * p * r / (p + r)
-        correct += confusion[i, i].item()
-        print("Label {}: {:.3f}, {:.3f}, {:.3f}".format(i, p, r, f1))
+    # 用于存储每个类别的指标，方便后续计算宏平均
+    all_p, all_r, all_f1 = [], [], []
 
-    print("Acc. (Correct/Total): {:.4f} ({}/{}) ".format(
-        correct / len(gold_labels), correct, len(gold_labels)
-    ))
+    for i in range(labels_num):
+        tp = confusion[i, i].item()
+        fp = confusion[i, :].sum().item() - tp
+        fn = confusion[:, i].sum().item() - tp
+        
+        # 计算 Precision, Recall, F1
+        p = tp / (tp + fp + eps)
+        r = tp / (tp + fn + eps)
+        f1 = 2 * p * r / (p + r + eps)
+        
+        all_p.append(p)
+        all_r.append(r)
+        all_f1.append(f1)
+        correct += tp
+        
+        print(f"Label {i}: P={p:.3f}, R={r:.3f}, F1={f1:.3f}")
+
+    # --- 计算总体指标 ---
+    accuracy = correct / len(gold_labels)
+    # 宏平均 (Macro Average): 每个类别的指标简单相加除以类别数
+    macro_p = sum(all_p) / labels_num
+    macro_r = sum(all_r) / labels_num
+    macro_f1 = sum(all_f1) / labels_num
+
+    print("-" * 30)
+    print(f"OVERALL METRICS:")
+    print(f"Acc. (Correct/Total): {accuracy:.4f} ({correct}/{len(gold_labels)})")
+    print(f"Macro Precision:      {macro_p:.4f}")
+    print(f"Macro Recall:         {macro_r:.4f}")
+    print(f"Macro F1-score:       {macro_f1:.4f}")
+    
+    return {
+        "accuracy": accuracy,
+        "macro_f1": macro_f1,
+        "confusion": confusion
+    }
 
 
 def main():
