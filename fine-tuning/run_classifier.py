@@ -224,6 +224,20 @@ def evaluate(args, dataset, print_confusion_matrix=False):
         for j in range(pred.size()[0]):
             confusion[pred[j], gold[j]] += 1
         correct += torch.sum(pred == gold).item()
+    
+    eps = 1e-9
+    precisions, recalls, f1s = [], [], []
+    
+    for i in range(confusion.size()[0]):
+        p = confusion[i, i].item() / (confusion[i, :].sum().item() + eps)
+        r = confusion[i, i].item() / (confusion[:, i].sum().item() + eps)
+        if (p + r) == 0:
+            f1 = 0
+        else:
+            f1 = 2 * p * r / (p + r)
+        precisions.append(p)
+        recalls.append(r)
+        f1s.append(f1)
 
     if print_confusion_matrix:
         print("Confusion matrix:")
@@ -237,17 +251,16 @@ def evaluate(args, dataset, print_confusion_matrix=False):
             for cf_a in cf_array:
                 f.write(str(cf_a)+'\n')
         print("Report precision, recall, and f1:")
-        eps = 1e-9
-        for i in range(confusion.size()[0]):
-            p = confusion[i, i].item() / (confusion[i, :].sum().item() + eps)
-            r = confusion[i, i].item() / (confusion[:, i].sum().item() + eps)
-            if (p + r) == 0:
-                f1 = 0
-            else:
-                f1 = 2 * p * r / (p + r)
-            print("Label {}: {:.3f}, {:.3f}, {:.3f}".format(i, p, r, f1))
+        for i in range(len(precisions)):
+            print("Label {}: {:.3f}, {:.3f}, {:.3f}".format(i, precisions[i], recalls[i], f1s[i]))
 
+    macro_p = sum(precisions) / len(precisions)
+    macro_r = sum(recalls) / len(recalls)
+    macro_f1 = sum(f1s) / len(f1s)
     print("Acc. (Correct/Total): {:.4f} ({}/{}) ".format(correct / len(dataset), correct, len(dataset)))
+    print(f"Macro Precision:  {macro_p:.4f}")
+    print(f"Macro Recall:     {macro_r:.4f}")
+    print(f"Macro F1 Score:   {macro_f1:.4f}")
     return correct / len(dataset), confusion
 
 
